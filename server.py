@@ -34,6 +34,3 @@ while True:
     t.daemon = True
     t.start()
 
-for cs in client_sockets:
-    cs.close()
-s.close()
