@@ -1,44 +1,89 @@
 import socket
 import random
-from threading import Thread
-from datetime import datetime
-from colorama import Fore, init, Back
+import threading
 
-init()
-colors = [Fore.BLUE, Fore.CYAN, Fore.GREEN, Fore.LIGHTBLACK_EX,
-    Fore.LIGHTBLUE_EX, Fore.LIGHTCYAN_EX, Fore.LIGHTGREEN_EX,
-    Fore.LIGHTMAGENTA_EX, Fore.LIGHTRED_EX, Fore.LIGHTWHITE_EX,
-    Fore.LIGHTYELLOW_EX, Fore.MAGENTA, Fore.RED, Fore.WHITE, Fore.YELLOW
-]
+UPD_MAX_SIZE = 65535
 
-client_color = random.choice(colors)
+COMMANDS = (
+    '/members',
+    '/connect',
+    '/exit',
+    '/help',
+)
 
-SERVER_HOST = "127.0.0.1"
-SERVER_PORT = 8080
-separator_token = "<SEP>"
+HELP_TEXT = """
+/members - выводит пользователей
+/connect <client> - подключает к собеседнику
+/exit - отключает от собеседника
+"""
 
-s = socket.socket()
-print(f"[*] Connecting to {SERVER_HOST}:{SERVER_PORT}...")
 
-s.connect((SERVER_HOST, SERVER_PORT))
-print("[+] Connected.")
-
-name = input("Enter your name: ")
-
-def listen_for_messages():
+def listen(s: socket.socket, host: str, port: int):
     while True:
-        message = s.recv(1024).decode()
-        print(message)
+        msg, addr = s.recvfrom(UPD_MAX_SIZE)
+        msg_port = addr[-1]
+        msg = msg.decode('ascii')
+        allowed_ports = threading.current_thread().allowed_ports
+        if msg_port not in allowed_ports:
+            continue
 
-t = Thread(target=listen_for_messages)
-t.daemon = True
-t.start()
+        if not msg:
+            continue
 
-while True:
-    to_send =  input()
-    if to_send.lower() == 'q':
-        break
-    date_now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    to_send = f"{client_color}[{date_now}] {name}{separator_token}{to_send}{Fore.RESET}"
-    s.send(to_send.encode())
-s.close()
+        if '__' in msg:
+            command, content = msg.split('__')
+            if command == 'members':
+                for n, member in enumerate(content.split(';'), start=1):
+                    print('\r\r' + f'{n}) {member}' + '\n' + 'сообщение: ', end='')
+            else:
+                peer_name = f'client{msg_port}'
+                print('\r\r' + f'{peer_name}: ' + msg + '\n' + f'сообщение: ', end='')
+
+
+def start_listen(target, socket, host, port):
+    th = threading.Thread(target=target, args=(socket, host, port), daemon=True)
+    th.start()
+    return th
+
+
+def connect(host='127.0.0.1', port=8080):
+    own_port = random.randint(9000, 10000)
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.bind((host, own_port))
+
+    listen_thread = start_listen(listen, s, host, port)
+    allowed_ports = [port]
+    listen_thread.allowed_ports = allowed_ports
+    sendto = (host, port)
+
+    s.sendto('__join'.encode('ascii'), sendto)
+
+    while True:
+        msg = input('Сообщение: ')
+
+        command = msg.split(' ')[0]
+        if command in COMMANDS:
+            if msg == '/members':
+                s.sendto('__members'.encode('ascii'), sendto)
+            if msg == '/exit':
+                peer_port = sendto[-1]
+                allowed_ports.remove(peer_port)
+                sendto = (host, port)
+                print(f'Ты отключился от {peer_port}...')
+            if msg.startswith('/connect'):
+                peer = msg.split(' ')[-1]
+                peer_port = int(peer.replace('client', ''))
+                allowed_ports.append(peer_port)
+                sendto = (host, peer_port)
+                print(f'Ты подключился к {peer_port}!')
+
+            if msg == '/help':
+                print(HELP_TEXT)
+
+        else:
+            s.sendto(msg.encode('ascii'), sendto)
+
+
+if __name__ == '__main__':
+    print('Добро пожаловать в pyChat')
+    connect()

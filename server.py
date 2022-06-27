@@ -1,36 +1,43 @@
 import socket
-from threading import Thread
 
-SERVER_HOST = "127.0.0.1"
-SERVER_PORT = 8080
-separator_token = "<SEP>"
+UPD_MAX_SIZE=65535
 
-client_sockets = set()
-server = socket.socket()
-server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-server.bind((SERVER_HOST, SERVER_PORT))
-server.listen(5)
-print(f"[*] Listening as {SERVER_HOST}:{SERVER_PORT}")
+def listen(host: str = '127.0.0.1', port: int = 8080):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.bind((host, port))
 
+    print(f'Слушаю по адресу: {host}:{port}')
 
-def listen_for_client(cs):
+    members = []
     while True:
-        try:
-            msg = cs.recv(1024).decode()
-        except Exception as e:
-            print(f"[!] Error: {e}")
-            client_sockets.remove(cs)
-        else:
-            msg = msg.replace(separator_token, ": ")
-        for client_socket in client_sockets:
-            client_socket.send(msg.encode())
+        msg, addr = s.recvfrom(UPD_MAX_SIZE)
+
+        if addr not in members:
+            members.append(addr)
+
+        if not msg:
+            continue
+
+        client_id = addr[1]
+        msg_text = msg.decode('ascii')
+        if msg_text == '__join':
+            print(f'Клиент {client_id} присоединился!')
+            continue
+
+        message_template = '{}__{}'
+
+        if msg_text == '__members':
+            print(f'Клиент {client_id} запросил список пользователей')
+            active_members = [f'client{m[1]}' for m in members if m != addr]
+            members_msg = ';'.join(active_members)
+            s.sendto(message_template.format('members', members_msg).encode('ascii'), addr)
+            continue
 
 
-while True:
-    client_socket, client_address = server.accept()
-    print(f"[+] {client_address} connected.")
-    client_sockets.add(client_socket)
-    t = Thread(target=listen_for_client, args=(client_socket,))
-    t.daemon = True
-    t.start()
-
+if __name__ == '__main__':
+    print('Сервер запущен...')
+    try:
+        listen()
+    except Exception as e:
+        print(f"Ошибка: {e}")
+        print("Сервер завершил работу")
