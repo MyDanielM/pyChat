@@ -1,8 +1,10 @@
 import socket
-import random
 import threading
+import random
 
-UPD_MAX_SIZE = 65535
+
+UDP_MAX_SIZE = 65535
+
 
 COMMANDS = (
     '/members',
@@ -12,15 +14,15 @@ COMMANDS = (
 )
 
 HELP_TEXT = """
-/members - выводит пользователей
-/connect <client> - подключает к собеседнику
-/exit - отключает от собеседника
+/members - get active members
+/connect <client> - connect to member
+/exit - disconnect from client
 """
 
 
 def listen(s: socket.socket, host: str, port: int):
     while True:
-        msg, addr = s.recvfrom(UPD_MAX_SIZE)
+        msg, addr = s.recvfrom(UDP_MAX_SIZE)
         msg_port = addr[-1]
         msg = msg.decode('ascii')
         allowed_ports = threading.current_thread().allowed_ports
@@ -34,10 +36,10 @@ def listen(s: socket.socket, host: str, port: int):
             command, content = msg.split('__')
             if command == 'members':
                 for n, member in enumerate(content.split(';'), start=1):
-                    print('\r\r' + f'{n}) {member}' + '\n' + 'сообщение: ', end='')
-            else:
-                peer_name = f'client{msg_port}'
-                print('\r\r' + f'{peer_name}: ' + msg + '\n' + f'сообщение: ', end='')
+                    print('\r\r' + f'{n}) {member}' + '\n' + 'you: ', end='')
+        else:
+            peer_name = f'client{msg_port}'
+            print('\r\r' + f'{peer_name}: '+ msg + '\n' + f'you: ', end='')
 
 
 def start_listen(target, socket, host, port):
@@ -46,8 +48,8 @@ def start_listen(target, socket, host, port):
     return th
 
 
-def connect(host='127.0.0.1', port=8080):
-    own_port = random.randint(9000, 10000)
+def connect(host: str = '127.0.0.1', port: int = 3000):
+    own_port = random.randint(8000, 9000)
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.bind((host, own_port))
 
@@ -55,35 +57,38 @@ def connect(host='127.0.0.1', port=8080):
     allowed_ports = [port]
     listen_thread.allowed_ports = allowed_ports
     sendto = (host, port)
-
     s.sendto('__join'.encode('ascii'), sendto)
-
     while True:
-        msg = input('Сообщение: ')
+        msg = input(f'you: ')
 
         command = msg.split(' ')[0]
         if command in COMMANDS:
             if msg == '/members':
                 s.sendto('__members'.encode('ascii'), sendto)
+
             if msg == '/exit':
-                peer_port = sendto[-1]
-                allowed_ports.remove(peer_port)
-                sendto = (host, port)
-                print(f'Ты отключился от {peer_port}...')
+                if len(allowed_ports)>1:
+                    peer_port = sendto[-1]
+                    allowed_ports.remove(peer_port)
+                    sendto = (host, port)
+                    print(f'Disconnect from client{peer_port}')
+
             if msg.startswith('/connect'):
                 peer = msg.split(' ')[-1]
                 peer_port = int(peer.replace('client', ''))
                 allowed_ports.append(peer_port)
                 sendto = (host, peer_port)
-                print(f'Ты подключился к {peer_port}!')
+                print(f'Connect to client{peer_port}')
 
             if msg == '/help':
                 print(HELP_TEXT)
-
         else:
             s.sendto(msg.encode('ascii'), sendto)
 
 
 if __name__ == '__main__':
-    print('Добро пожаловать в pyChat')
-    connect()
+    print('Welcome to chat! Remember about ascii... Type /help for more commands.')
+    try:
+        connect()
+    except Exception as e:
+        print(f'Error! {e}')
