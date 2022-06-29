@@ -20,10 +20,6 @@ def connect():
     while True:
         msg = input()
         s.send(msg.encode())
-    #login = input('Enter you name: ')
-    #s.send(login.encode())
-    #password = input('Enter password: ')
-    #s.send(password.encode())
 
 
 
