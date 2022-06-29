@@ -26,6 +26,7 @@ def addUser(login: str, password: str, addr: str, port: int):
         print(f'Added new user {login} {addr}:{port}.')
     conn.close()
 
+
 def initDB():
     conn = sqlite3.connect('users.db')
 
@@ -45,26 +46,37 @@ def initDB():
         conn.commit()
 
         cur.execute("""INSERT INTO users(userid, login, password, addr, port) 
-        VALUES('1', 'server', 'revres', '46.42.23.187', 8080);""")
+        VALUES(?, ?, ?, ?, ?);""", (1, 'server', 'revres', '192.168.0.104', 65000))
         conn.commit()
         conn.close()
+
 
 def getUser(login: str):
     conn = sqlite3.connect('users.db')
     cur = conn.cursor()
 
     cur.execute('SELECT login, addr, port FROM users WHERE login = ?', (login,))
-    user = cur.fetchall()
+    user = cur.fetchone()
     conn.close()
     return user
 
+
 def listen():
-    server = socket.socket()
+    server = getUser('server')
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(('192.168.0.104', server[2]))
+    s.listen()
+    while True:
+        conn, addr = s.accept()
+        print(f'Client {addr} connected!')
+        msg = s.recv(1024).decode()
+        print(msg)
+    s.close()
 
 
 if __name__ == '__main__':
     try:
-        initDB()
-
+        # initDB()
+        listen()
     except Exception as e:
         print(f"Error! {e}")
