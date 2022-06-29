@@ -1,16 +1,32 @@
 import socket
+import threading
+
+
+def listen(s):
+    while True:
+        msg = s.recv(1024).decode()
+        if len(msg)>0:
+            print(msg)
+
+
 
 def connect():
-    sock = socket.socket()
-    sock.connect(('192.168.0.104', 65000))
-    login = input('Enter you name: ')
-    password = input('Enter password: ')
-    user = []
-    user.append(login)
-    user.append(password)
-    sock.send(user.encode())
+    s = socket.socket()
+    s.connect(('192.168.0.104', 65000))
 
-    sock.close()
+    thread = threading.Thread(target=listen, args=(s,), daemon=True)
+    thread.start()
+
+    while True:
+        msg = input()
+        s.send(msg.encode())
+    #login = input('Enter you name: ')
+    #s.send(login.encode())
+    #password = input('Enter password: ')
+    #s.send(password.encode())
+
+
+
 
 if __name__ == '__main__':
     print('Welcome to chat!')
