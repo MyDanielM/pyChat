@@ -1,41 +1,70 @@
 import socket
+import sqlite3
+import os.path
 
-UDP_MAX_SIZE = 65535
 
+def addUser(login: str, password: str, addr: str, port: int):
+    conn = sqlite3.connect('users.db')
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM users')
+    users = cur.fetchall()
+    new_id = len(users)
+    new_user = (new_id + 1, login, password, addr, port)
 
-def listen(host: str = '127.0.0.1', port: int = 3000):
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    cur.execute("""
+        SELECT COUNT(*)
+        FROM users
+        WHERE login = ? OR port = ?
+    """, (new_user[1], new_user[-1],))
+    flag = cur.fetchone()[0]
 
-    s.bind((host, port))
-    print(f'Listening at {host}:{port}')
+    if flag:
+        print(f'Error! User {login} with {addr}:{port} already exist!')
+    else:
+        cur.execute('INSERT INTO users VALUES(?, ?, ?, ?, ?);', new_user)
+        conn.commit()
+        print(f'Added new user {login} {addr}:{port}.')
+    conn.close()
 
-    members = []
-    while True:
-        msg, addr = s.recvfrom(UDP_MAX_SIZE)
+def initDB():
+    conn = sqlite3.connect('users.db')
 
-        if addr not in members:
-            members.append(addr)
+    cur = conn.cursor()
+    if os.path.exists('users.db'):
+        print('Connecting to DB...')
+        print('Connection success!')
+        conn.close()
+    else:
+        cur.execute("""CREATE TABLE IF NOT EXISTS users(
+        userid INT PRIMARY KEY,
+        login TEXT,
+        password TEXT,
+        addr TEXT,
+        port TEXT);
+        """)
+        conn.commit()
 
-        if not msg:
-            continue
+        cur.execute("""INSERT INTO users(userid, login, password, addr, port) 
+        VALUES('1', 'server', 'revres', '46.42.23.187', 8080);""")
+        conn.commit()
+        conn.close()
 
-        client_id = addr[1]
-        msg_text = msg.decode('ascii')
-        if msg_text == '__join':
-            print(f'Client {client_id} joined chat')
-            continue
+def getUser(login: str):
+    conn = sqlite3.connect('users.db')
+    cur = conn.cursor()
 
-        message_template = '{}__{}'
-        if msg_text == '__members':
-            print(f'Client {client_id} requsted members')
-            active_members = [f'client{m[1]}' for m in members if m != addr]
-            members_msg = ';'.join(active_members)
-            s.sendto(message_template.format('members', members_msg).encode('ascii'), addr)
-            continue
+    cur.execute('SELECT login, addr, port FROM users WHERE login = ?', (login,))
+    user = cur.fetchall()
+    conn.close()
+    return user
+
+def listen():
+    server = socket.socket()
 
 
 if __name__ == '__main__':
     try:
-        listen()
+        initDB()
+
     except Exception as e:
         print(f"Error! {e}")
